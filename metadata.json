@@ -1,0 +1,6 @@
+{
+  "name": "mmWave Studio Parameter Lab",
+  "description": "FMCW Radar parameter configuration, physical performance compiler, validation, trade-off analyzer, and mmWave Studio Lua generator for TI AWR1843BOOST & DCA1000.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
