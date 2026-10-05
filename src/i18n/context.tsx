@@ -33,6 +33,8 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setLanguage(language === 'zh' ? 'en' : 'zh');
   };
 
+  useEffect(() => { document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en'; }, [language]);
+
   const t = language === 'zh' ? zhTranslations : enTranslations;
 
   return (

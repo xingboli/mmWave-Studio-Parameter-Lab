@@ -1,3 +1,4 @@
+import { parseExperiment } from '../../radar/import.ts';
 import React, { useState, useRef } from 'react';
 import { RadarConfig, CalculatedRadarPerformance, ExperimentMetadata } from '../../radar/types.ts';
 import { X, Download, Upload, Copy, Check, FileJson } from 'lucide-react';
@@ -85,6 +86,8 @@ export const MetadataModal: React.FC<MetadataModalProps> = ({
     setImportError(null);
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = '';
+    if (file.size > 1024 * 1024) { setImportError('JSON file exceeds 1 MB.'); return; }
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -92,18 +95,14 @@ export const MetadataModal: React.FC<MetadataModalProps> = ({
         const text = event.target?.result as string;
         const parsed = JSON.parse(text);
 
-        const importedConfig = parsed.config || (parsed.profile ? parsed : null);
-        if (!importedConfig || !importedConfig.profile) {
-          throw new Error('Invalid JSON structure: Missing radar profile configuration.');
-        }
-
-        const importedMeta = parsed.metadata ? parsed.metadata : undefined;
-        onImportConfig(importedConfig, importedMeta);
+        const imported = parseExperiment(parsed);
+        onImportConfig(imported.config, imported.metadata);
         onClose();
       } catch (err: any) {
         setImportError(err.message || 'Failed to parse JSON file.');
       }
     };
+    reader.onerror = () => setImportError('Failed to read JSON file.');
     reader.readAsText(file);
   };
 

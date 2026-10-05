@@ -23,12 +23,17 @@ export const ParameterPanel: React.FC<ParameterPanelProps> = ({
 
       <ChirpSection
         chirps={config.chirps}
-        onChange={(chirps) => onChange({ ...config, chirps })}
+        profileId={config.profile.profileId}
+        onChange={(chirps, syncFrame) => onChange({
+          ...config, chirps,
+          frame: syncFrame ? {...config.frame, chirpStartIndex: Math.min(...chirps.map(c => c.chirpIndex)), chirpEndIndex: Math.max(...chirps.map(c => c.chirpIndex))} : config.frame,
+          channels: {...config.channels, txEnabled: [0, 1, 2].map(i => chirps.some(c => c.txEnabled[i])) as [boolean, boolean, boolean]},
+        })}
       />
 
       <FrameSection
         frame={config.frame}
-        maxChirpIndex={Math.max(0, config.chirps.length - 1)}
+        maxChirpIndex={Math.max(0, ...config.chirps.map(c => c.chirpIndex))}
         onChange={(frame) => onChange({ ...config, frame })}
       />
 

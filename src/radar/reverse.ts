@@ -31,6 +31,10 @@ export function searchFeasibleConfigurations(
   targets: ReverseDesignTargets,
   maxResults = 8
 ): CandidateSolution[] {
+  if (![targets.maxRangeResolutionM, targets.minMaxRangeM, targets.minMaxVelocityMps, targets.minFrameRateFps]
+    .every((value) => Number.isFinite(value) && value > 0)) return [];
+  if (targets.maxDutyCyclePercent !== undefined && (!Number.isFinite(targets.maxDutyCyclePercent) || targets.maxDutyCyclePercent <= 0)) return [];
+  if (!Number.isInteger(maxResults) || maxResults <= 0) return [];
   const candidateSlopes = [10.0, 15.0, 20.0, 25.0, 29.982, 35.0, 45.0, 60.0];
   const candidateSamples = [128, 256, 512];
   const candidateSampleRates = [2500, 5000, 6250, 8000, 10000];

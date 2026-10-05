@@ -75,7 +75,7 @@ export function calculateRadarPerformance(
   // Theoretical: Rmax = Fs * c / (2 * Slope)
   // Recommended: 0.9 * Rmax (accounting for IF filter roll-off)
   const theoreticalMaxRangeM = safeDiv(
-    sampleRateHz * SPEED_OF_LIGHT,
+    sampleRateHz * SPEED_OF_LIGHT * (config.adc.complex ? 1 : 0.5),
     2 * Math.abs(slopeHzS)
   );
   const recommendedMaxRangeM =
@@ -102,8 +102,7 @@ export function calculateRadarPerformance(
   // Determine active TX channels across the configured chirps or fallback to channel config
   const activeTxMap = [false, false, false];
   if (config.chirps && config.chirps.length > 0) {
-    for (let i = chirpStart; i <= chirpEnd; i++) {
-      const chirp = config.chirps[i] || config.chirps[i % config.chirps.length];
+    for (const chirp of config.chirps.filter(c => c.chirpIndex >= chirpStart && c.chirpIndex <= chirpEnd)) {
       if (chirp && chirp.txEnabled) {
         if (chirp.txEnabled[0]) activeTxMap[0] = true;
         if (chirp.txEnabled[1]) activeTxMap[1] = true;
@@ -115,7 +114,7 @@ export function calculateRadarPerformance(
     activeTxMap[1] = !!config.channels.txEnabled[1];
     activeTxMap[2] = !!config.channels.txEnabled[2];
   }
-  const activeTxCount = Math.max(1, activeTxMap.filter(Boolean).length);
+  const activeTxCount = activeTxMap.filter(Boolean).length;
 
   // For TDM-MIMO:
   // Repetition interval for the SAME TX antenna is Ntx_active * Tchirp
@@ -152,7 +151,7 @@ export function calculateRadarPerformance(
 
   const dutyCyclePercent =
     framePeriodicityS > 0
-      ? Math.min(100, Math.max(0, (frameActiveTimeS / framePeriodicityS) * 100))
+      ? Math.max(0, (frameActiveTimeS / framePeriodicityS) * 100)
       : 0;
 
   // 11. Virtual Antenna Count & Approximate Angular Resolution

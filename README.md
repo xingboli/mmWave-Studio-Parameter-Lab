@@ -1,5 +1,7 @@
 # mmWave Studio Parameter Lab
 
+[Live app](https://xingboli.github.io/mmWave-Studio-Parameter-Lab/) · [MIT License](LICENSE)
+
 A dedicated, static FMCW radar parameter configuration, physical performance compiler, constraint validation, and mmWave Studio Lua generator tailored for researchers working with **Texas Instruments AWR1843BOOST** and **DCA1000 EVM**.
 
 > **Disclaimer:** This tool is intended for experiment design and configuration assistance. Calculated results are engineering estimates and should be verified against official TI documentation (e.g. SWRA553, SPRUIS4C) and actual hardware measurements.
@@ -17,7 +19,7 @@ Traditional spreadsheets and standalone formula calculators calculate numbers in
 
 **mmWave Studio Parameter Lab** functions as an **Experiment Configuration Compiler**:
 
-$$\text{Experiment Goals} \longrightarrow \text{Physical Modeling} \longrightarrow \text{Constraint Validation} \longrightarrow \text{Trade-off Analysis} \longrightarrow \text{Verified Lua Script}$$
+$$\text{Experiment Goals} \longrightarrow \text{Physical Modeling} \longrightarrow \text{Constraint Validation} \longrightarrow \text{Trade-off Analysis} \longrightarrow \text{Lua Configuration Template}$$
 
 ---
 
@@ -43,8 +45,8 @@ $$\text{Experiment Goals} \longrightarrow \text{Physical Modeling} \longrightarr
   - Minimum idle time checks for PLL VCO settling ($T_{idle} \ge 2\ \mu\text{s}$)
 - **Trade-off Engine:** Dynamic insight cards explaining the physical "why" behind current parameter values.
 - **mmWave Studio 2.x Lua Generator:**
-  - **Mode A (Config Only):** 100% verified `ar1.*` commands (`ChannelConfig`, `ADCBufConfig`, `ProfileConfig`, `ChirpConfig`, `FrameConfig`)
-  - **Mode B (Config + Capture - Beta):** Verified DCA1000 LVDS Ethernet arming and capture triggers
+  - **Mode A (Config Only):** Studio 2.1.1 API mappings checked against TI definitions (`ChanNAdcConfig`, `ProfileConfig`, `ChirpConfig`, `FrameConfig`); not hardware tested
+  - **Mode B (Config + Capture - Beta):** DCA1000 capture template requiring prior Ethernet initialization and sensor LVDS configuration
   - **Mode C (Full Automation - Reference Template):** Board bringup sequence template
 - **Parameter Sweep Generator:** Batch simulate performance across slope, samples, sample rate, idle time, or loops, with CSV export and Lua iteration scripts.
 - **Reverse Design (Beta):** Bounded grid search algorithm compiling compliant parameter combinations from user performance targets ($\Delta R$, $R_{max}$, $V_{max}$, FPS).
@@ -102,7 +104,7 @@ src/
 | :--- | :--- | :--- |
 | **Radar Sensor** | TI AWR1843 / AWR1843BOOST | Native Profile |
 | **Data Capture** | TI DCA1000 EVM | Supported (LVDS over Ethernet) |
-| **mmWave Studio** | Version 2.0 / 2.1.1.0 (`ar1.*` API) | Mode A Verified, Mode B Beta |
+| **mmWave Studio** | Version 2.0 / 2.1.1.0 (`ar1.*` API) | Mode A API checked (not hardware tested), Mode B Beta |
 | **Future Extension** | AWR1642, IWR6843, AWR2944, Studio 4.x (`mws.*`) | Architecture ready via `DeviceProfile` |
 
 ---
@@ -115,6 +117,8 @@ Internal calculations strictly use standard SI units:
 - Distance: $\text{meters}$
 - Velocity: $\text{m/s}$
 - Speed of light: $c = 299,792,458\ \text{m/s}$
+
+Real ADC sampling halves the theoretical and recommended maximum range relative to Complex 1x IQ at the same sample rate (Nyquist limit). Doppler timing uses the number of chirp slots in a loop. Duty cycle is reported without a 100% cap so timing overflow remains visible.
 
 1. **Carrier Wavelength:** $\lambda = \frac{c}{f_0}$ (using Start Frequency $f_0$ as Doppler approximation)
 2. **ADC Sampling Duration:** $T_{adc} = \frac{N_{adc}}{F_s}$
@@ -134,16 +138,20 @@ Internal calculations strictly use standard SI units:
 
 The generator follows a two-tier credibility model:
 
-### Verified TI mmWave Studio 2.x Commands
-- `ar1.ChannelConfig(rxMask, txMask, cascading)`
-- `ar1.ADCBufConfig(dataFmt, iqSwap, chanInterleave, chirpThreshold)`
-- `ar1.ProfileConfig(profileId, startFreq, idleTime, adcStartTime, rampEndTime, txOutPower, txPhaseShifter, freqSlopeConst, txStartTime, numAdcSamples, digOutSampleRate, hpf1, hpf2, rxGain)`
-- `ar1.ChirpConfig(chirpStartIndex, chirpEndIndex, profileId, startFreqVar, freqSlopeVar, idleTimeVar, adcStartTimeVar, txMask)`
-- `ar1.FrameConfig(chirpStartIndex, chirpEndIndex, numLoops, numFrames, framePeriodicity, triggerDelay, numDummyChirps)`
+### TI mmWave Studio 2.1.1 Command Mappings
+
+Mappings were checked against TI's `AR1xController` interface and `DataCaptureDemo_xWR.lua` distributed with Studio 2.1.1. Hardware execution is still unverified.
+
+- `ar1.ChanNAdcConfig(tx0, tx1, tx2, rx0, rx1, rx2, rx3, bitsIndex, format, iqSwap)`
+- `ar1.ProfileConfig(profileId, startFreq, idleTime, adcStartTime, rampEndTime, tx0Power, tx1Power, tx2Power, tx0Phase, tx1Phase, tx2Phase, slope, txStartTime, samples, sampleRate, hpf1, hpf2, rxGain)`
+- `ar1.ChirpConfig(startIndex, endIndex, profileId, startFreqVar, slopeVar, idleVar, adcStartVar, tx0, tx1, tx2)`
+- `ar1.FrameConfig(startIndex, endIndex, frameCount, loopCount, periodMs, triggerDelayMs, dummyChirps, triggerSelect)`
+
+The model supports a uniform positive-slope profile and one TX per chirp, with each active TX occurring once per loop. Unsupported TX patterns and nonzero per-chirp variations are rejected. Invalid configurations produce a commented diagnostic instead of executable Lua. Mode A requires an already connected, powered and RF-initialized board. Capture templates also require prior DCA1000 Ethernet/FPGA initialization and sensor LVDS setup. No firmware, TI binaries or vendor scripts are distributed in this repository.
 
 ### DCA1000 & Automation Commands (Beta / Template)
 - `ar1.SelectCaptureDevice("DCA1000")`
-- `ar1.CaptureCardConfig_Mode(1, 1, 1, 2, 1, 30)`
+- `ar1.CaptureCardConfig_Mode(1, 2, 1, 2, 3, 30)`
 - `ar1.CaptureCardConfig_StartRecord(filePath, 1)`
 - `ar1.StartFrame()`
 
@@ -151,9 +159,11 @@ The generator follows a two-tier credibility model:
 
 ## 7. Local Development
 
+Requires Node.js 24 or later. All processing runs in the browser; no API keys are required. Configuration and language preferences are stored in localStorage. JSON imports are structurally validated before use.
+
 ```bash
 # 1. Install dependencies
-npm install
+npm ci
 
 # 2. Run unit test suite (Vitest)
 npm test
@@ -189,3 +199,7 @@ To deploy on GitHub Pages:
 - [ ] Add device profile for **IWR6843** (60 GHz) and **AWR2944** (77 GHz 4-TX)
 - [ ] Add mmWave Studio 4.x CLI script generator (`mws.*`)
 - [ ] Direct WebUSB / WebSerial connectivity runner
+
+## 10. License
+
+The original application source is released under the [MIT License](LICENSE), allowing reuse, modification and commercial use with the copyright and license notice retained. Third-party dependencies retain their own licenses. TI documentation, SDKs, firmware and trademarks are not covered by this project's license.

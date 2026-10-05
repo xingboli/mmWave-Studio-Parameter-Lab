@@ -54,7 +54,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({
             <p>
               {language === 'zh'
                 ? 'mmWave Studio Parameter Lab 是专门为使用 TI AWR1843BOOST 与 DCA1000 采集卡的雷达实验科研人员开发的一体化配置编译工具。不同于普通的单项公式计算器，它将物理性能推导、硬件时序边界校验、参数相互权衡因果分析与 mmWave Studio 2.x (ar1.*) Lua 脚本实时生成深度整合，防止因采样超限或占空比超载导致的实验失败。'
-                : 'mmWave Studio Parameter Lab is a dedicated FMCW experiment configuration compiler tailored for researchers using TI AWR1843BOOST and DCA1000 EVM with mmWave Studio 2.x. It acts as an experiment compiler, linking physical performance directly to hardware timing constraints and generating verified Lua control scripts.'}
+                : 'mmWave Studio Parameter Lab is a dedicated FMCW experiment configuration compiler tailored for researchers using TI AWR1843BOOST and DCA1000 EVM with mmWave Studio 2.x. It acts as an experiment compiler, linking physical performance directly to hardware timing constraints and generating Lua configuration templates.'}
             </p>
           </div>
 
@@ -156,10 +156,10 @@ export const AboutModal: React.FC<AboutModalProps> = ({
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-semibold">
-                    {language === 'zh' ? '模式 A (雷达射频参数) —— 100% 已验证:' : 'Mode A (Radar Config) — 100% Verified:'}
+                    {language === 'zh' ? '模式 A (雷达射频参数) —— 接口映射已核对，尚未硬件实测:' : 'Mode A (Radar Config) — API mapping checked; not hardware tested:'}
                   </span>
                   <div className="font-mono text-[10px] text-emerald-900 mt-0.5">
-                    ar1.ChannelConfig, ar1.ADCBufConfig, ar1.ProfileConfig, ar1.ChirpConfig, ar1.FrameConfig
+                    ar1.ChanNAdcConfig, ar1.ProfileConfig, ar1.ChirpConfig, ar1.FrameConfig
                   </div>
                 </div>
               </div>

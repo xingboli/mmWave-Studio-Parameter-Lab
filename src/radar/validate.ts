@@ -33,6 +33,50 @@ export function validateRadarConfig(
 
   const { profile, channels, frame } = config;
 
+  const error = (code: string, field: string, en: string, zh: string) => issues.push({
+    severity: 'error', code, field, title: isZh ? zh : en, message: isZh ? zh : en,
+  });
+  for (const [field, value] of [...Object.entries(profile), ...Object.entries(frame)]) {
+    if (!Number.isFinite(value)) error('NON_FINITE_PARAMETER', field, `Invalid numeric parameter: ${field}`, `参数必须为有限数值: ${field}`);
+  }
+  if (profile.frequencySlopeMHzUs < constraints.minSlopeMHzUs || profile.frequencySlopeMHzUs > constraints.maxSlopeMHzUs)
+    error('SLOPE_OUT_OF_RANGE', 'frequencySlopeMHzUs', 'Slope must be within the supported positive range.', '调频斜率必须在支持的正数范围内。');
+  if (profile.rampEndTimeUs < constraints.minRampEndTimeUs || profile.rampEndTimeUs > constraints.maxRampEndTimeUs)
+    error('RAMP_OUT_OF_RANGE', 'rampEndTimeUs', 'Ramp duration is outside the supported range.', 'Ramp 时长超出支持范围。');
+  if (profile.adcStartTimeUs < 0 || frame.triggerDelayMs < 0)
+    error('NEGATIVE_DELAY', 'adcStartTimeUs', 'Delays cannot be negative.', '启动延迟不能为负数。');
+  if (!Number.isInteger(profile.profileId) || profile.profileId < 0 || profile.profileId > 3)
+    error('PROFILE_ID_INVALID', 'profileId', 'Profile ID must be an integer from 0 to 3.', 'Profile ID 必须是 0 至 3 的整数。');
+  if (!Number.isInteger(frame.chirpStartIndex) || !Number.isInteger(frame.chirpEndIndex) ||
+      frame.chirpStartIndex < 0 || frame.chirpEndIndex > 511 || frame.chirpStartIndex > frame.chirpEndIndex)
+    error('CHIRP_RANGE_INVALID', 'chirps', 'Frame chirp range must be ordered integer indices within 0..511.', '帧 Chirp 范围必须是 0 至 511 内按顺序排列的整数。');
+  if (frame.loops > 65535 || frame.frames > 65535)
+    error('FRAME_COUNT_OUT_OF_RANGE', 'frame', 'Loops and frames must fit unsigned 16-bit fields.', '循环数与帧数不能超过 65535。');
+  if (!device.supportedAdcBits.includes(config.adc.bitsPerComponent))
+    error('ADC_BITS_INVALID', 'adc', 'ADC precision must be 12, 14 or 16 bits.', 'ADC 位宽必须为 12、14 或 16。');
+  const activeChirps = config.chirps.filter(c => c.chirpIndex >= frame.chirpStartIndex && c.chirpIndex <= frame.chirpEndIndex);
+  if (new Set(activeChirps.map(c => c.chirpIndex)).size !== frame.chirpEndIndex - frame.chirpStartIndex + 1 ||
+      new Set(config.chirps.map(c => c.chirpIndex)).size !== config.chirps.length)
+    error('CHIRP_MISSING_OR_DUPLICATE', 'chirps', 'Every frame chirp must have one unique configuration.', '帧范围内每个 Chirp 必须有且仅有一份配置。');
+  const txOccurrences = [0, 0, 0];
+  for (const chirp of config.chirps) {
+    if (!Number.isInteger(chirp.chirpIndex) || chirp.chirpIndex < 0 || chirp.chirpIndex > 511)
+      error('CHIRP_INDEX_INVALID', 'chirps', 'Chirp indices must be integers within 0..511.', 'Chirp 索引必须是 0 至 511 的整数。');
+    const isActive = activeChirps.includes(chirp);
+    if (chirp.profileId !== profile.profileId)
+      error('CHIRP_PROFILE_MISMATCH', 'chirps', 'Chirp references a profile that is not configured.', 'Chirp 引用了未配置的 Profile。');
+    if (isActive && chirp.txEnabled.filter(Boolean).length !== 1)
+      error('UNSUPPORTED_TX_PATTERN', 'chirps', 'This calculator supports one active TX per chirp (TDM).', '此计算器仅支持每个 Chirp 启用一个 TX 的 TDM 模式。');
+    chirp.txEnabled.forEach((enabled, i) => {
+      if (enabled && isActive) txOccurrences[i]++;
+      if (enabled && !channels.txEnabled[i]) error('CHIRP_TX_DISABLED', 'chirps', 'A chirp uses a TX disabled by the channel configuration.', 'Chirp 使用了通道配置中关闭的 TX。');
+    });
+    if (isActive && [chirp.startFreqVarMHz, chirp.freqSlopeVarMHzUs, chirp.idleTimeVarUs, chirp.adcStartTimeVarUs].some(v => v !== undefined && v !== 0))
+      error('UNSUPPORTED_CHIRP_VARIATION', 'chirps', 'Per-chirp variations are not modeled; use a uniform profile.', '尚未建模每个 Chirp 的参数偏移，请使用一致的 Profile。');
+  }
+  if (txOccurrences.some(n => n > 1))
+    error('UNSUPPORTED_TDM_PATTERN', 'chirps', 'Doppler estimates require each active TX exactly once per loop.', '多普勒估算要求每个启用的 TX 在每次循环中恰好发射一次。');
+
   // --- 1. ADC Sampling Window vs Ramp End Time ---
   const adcStartUs = profile.adcStartTimeUs || 0;
   const adcDurationUs = perf.adcSamplingTimeUs;

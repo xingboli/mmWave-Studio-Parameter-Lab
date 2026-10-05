@@ -1,3 +1,4 @@
+import { validateRadarConfig } from '../radar/validate.ts';
 import { RadarConfig, CalculatedRadarPerformance } from '../radar/types.ts';
 import {
   LuaGenerationOptions,
@@ -15,11 +16,11 @@ import {
 } from './studio2.ts';
 import { getDeviceById } from '../radar/devices/awr1843.ts';
 
-function formatCommandLine(cmd: LuaCommand): string {
+function formatCommandLine(cmd: LuaCommand, includeComments: boolean): string {
   const argsStr = cmd.args.join(', ');
   const call = `${cmd.apiName}(${argsStr})`;
-  if (cmd.comment) {
-    return `${call.padEnd(50, ' ')} -- ${cmd.comment}`;
+  if (includeComments && cmd.comment) {
+    return `${call.padEnd(50, ' ')} -- ${cmd.comment.replace(/[\r\n\x00-\x1f]+/g, ' ')}`;
   }
   return call;
 }
@@ -29,6 +30,12 @@ export function generateStudio2Lua(
   perf: CalculatedRadarPerformance,
   options: LuaGenerationOptions
 ): GeneratedLuaScript {
+  const validation = validateRadarConfig(config, perf, 'en');
+  if (!validation.isValid) return {
+    code: ['-- Lua generation blocked: fix configuration errors first.', ...validation.issues.filter(i => i.severity === 'error').map(i => `-- ${i.code}: ${i.message}`)].join('\n'),
+    mode: options.mode, backendName: 'mmWave Studio 2.x (ar1.*)',
+    verifiedStatus: {radarConfigVerified: false, dca1000Verified: false, automationVerified: false},
+  };
   const device = getDeviceById(config.device);
   const lines: string[] = [];
 
@@ -40,13 +47,13 @@ export function generateStudio2Lua(
   lines.push(`-- Mode: ${options.mode.toUpperCase()}`);
   lines.push(`-- Generated At: ${new Date().toISOString()}`);
   if (options.metadata?.experimentName) {
-    lines.push(`-- Experiment: ${options.metadata.experimentName}`);
+    lines.push(`-- Experiment: ${options.metadata.experimentName.replace(/[\r\n]+/g, ' ')}`);
   }
   if (options.metadata?.author) {
-    lines.push(`-- Author: ${options.metadata.author}`);
+    lines.push(`-- Author: ${options.metadata.author.replace(/[\r\n]+/g, ' ')}`);
   }
   if (options.metadata?.notes) {
-    lines.push(`-- Notes: ${options.metadata.notes.replace(/\n/g, ' ')}`);
+    lines.push(`-- Notes: ${options.metadata.notes.replace(/[\r\n]+/g, ' ')}`);
   }
   lines.push('-- ==============================================================================');
   lines.push('');
@@ -94,12 +101,12 @@ export function generateStudio2Lua(
     if (!sec.isVerified) {
       lines.push('-- [STATUS: NOT VERIFIED / TEMPLATE - Check environment parameters]');
     } else {
-      lines.push('-- [STATUS: VERIFIED TI mmWave Studio 2.x API]');
+      lines.push('-- [STATUS: API mapping checked against TI Studio 2.1.1; not hardware tested]');
     }
     lines.push(`-- ------------------------------------------------------------------------------`);
 
     sec.commands.forEach((cmd) => {
-      lines.push(formatCommandLine(cmd));
+      lines.push(formatCommandLine(cmd, options.includeComments));
     });
     lines.push('');
   });
@@ -112,8 +119,8 @@ export function generateStudio2Lua(
     backendName: 'mmWave Studio 2.x (ar1.*)',
     verifiedStatus: {
       radarConfigVerified: true,
-      dca1000Verified: options.mode !== 'config_only',
-      automationVerified: options.mode === 'full_automation',
+      dca1000Verified: false,
+      automationVerified: false,
     },
   };
 }

@@ -132,7 +132,7 @@ export const enTranslations: Translations = {
   modeA: 'Mode A: Config Only',
   modeB: 'Mode B: +Capture (Beta)',
   modeC: 'Mode C: Full Auto (Template)',
-  verifiedLabel: 'Verified mmWave Studio 2.x ar1.* API commands',
+  verifiedLabel: 'Studio 2.1.1 API mapping checked; hardware testing pending',
   unverifiedLabel: 'Contains DCA1000/Bringup commands: verify local host paths & COM ports',
   perfHeaderToggle: 'Performance Header',
   btnCopy: 'Copy',

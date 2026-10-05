@@ -5,11 +5,13 @@ import { useLanguage } from '../../i18n/context.tsx';
 
 interface ChirpSectionProps {
   chirps: ChirpConfig[];
-  onChange: (updated: ChirpConfig[]) => void;
+  profileId: number;
+  onChange: (updated: ChirpConfig[], syncFrame?: boolean) => void;
 }
 
 export const ChirpSection: React.FC<ChirpSectionProps> = ({
   chirps,
+  profileId,
   onChange,
 }) => {
   const { t, language } = useLanguage();
@@ -26,7 +28,7 @@ export const ChirpSection: React.FC<ChirpSectionProps> = ({
 
   const addChirp = () => {
     if (chirps.length >= 8) return;
-    const nextIdx = chirps.length;
+    const nextIdx = Math.max(...chirps.map(c => c.chirpIndex)) + 1;
     const defaultTx: [boolean, boolean, boolean] = [
       nextIdx % 3 === 0,
       nextIdx % 3 === 1,
@@ -36,10 +38,10 @@ export const ChirpSection: React.FC<ChirpSectionProps> = ({
       ...chirps,
       {
         chirpIndex: nextIdx,
-        profileId: 0,
+        profileId,
         txEnabled: defaultTx,
       },
-    ]);
+    ], true);
   };
 
   const removeChirp = (idx: number) => {
@@ -47,25 +49,25 @@ export const ChirpSection: React.FC<ChirpSectionProps> = ({
     const filtered = chirps
       .filter((_, i) => i !== idx)
       .map((c, i) => ({ ...c, chirpIndex: i }));
-    onChange(filtered);
+    onChange(filtered, true);
   };
 
   const applyPattern = (pattern: 'single' | 'tdm2' | 'tdm3') => {
     if (pattern === 'single') {
       onChange([
-        { chirpIndex: 0, profileId: 0, txEnabled: [true, false, false] },
-      ]);
+        { chirpIndex: 0, profileId, txEnabled: [true, false, false] },
+      ], true);
     } else if (pattern === 'tdm2') {
       onChange([
-        { chirpIndex: 0, profileId: 0, txEnabled: [true, false, false] },
-        { chirpIndex: 1, profileId: 0, txEnabled: [false, false, true] },
-      ]);
+        { chirpIndex: 0, profileId, txEnabled: [true, false, false] },
+        { chirpIndex: 1, profileId, txEnabled: [false, false, true] },
+      ], true);
     } else if (pattern === 'tdm3') {
       onChange([
-        { chirpIndex: 0, profileId: 0, txEnabled: [true, false, false] },
-        { chirpIndex: 1, profileId: 0, txEnabled: [false, true, false] },
-        { chirpIndex: 2, profileId: 0, txEnabled: [false, false, true] },
-      ]);
+        { chirpIndex: 0, profileId, txEnabled: [true, false, false] },
+        { chirpIndex: 1, profileId, txEnabled: [false, true, false] },
+        { chirpIndex: 2, profileId, txEnabled: [false, false, true] },
+      ], true);
     }
   };
 

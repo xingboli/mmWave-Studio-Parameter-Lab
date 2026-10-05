@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { parseExperiment } from './radar/import.ts';
 import { RadarConfig, ExperimentMetadata } from './radar/types.ts';
 import { calculateRadarPerformance } from './radar/calculate.ts';
 import { validateRadarConfig } from './radar/validate.ts';
@@ -47,8 +48,7 @@ function RadarLabMain() {
     try {
       const saved = localStorage.getItem('mmwave_lab_config');
       if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.profile && parsed.frame) return parsed;
+        return parseExperiment(JSON.parse(saved)).config;
       }
     } catch {}
     return PRESETS[0].config;
@@ -292,6 +292,8 @@ function RadarLabMain() {
           </div>
 
           <div className="flex items-center gap-3">
+            <a href="https://github.com/xingboli/mmWave-Studio-Parameter-Lab" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">GitHub</a>
+            <a href="https://github.com/xingboli/mmWave-Studio-Parameter-Lab/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">MIT</a>
             <button
               type="button"
               onClick={() => setShowAboutModal(true)}

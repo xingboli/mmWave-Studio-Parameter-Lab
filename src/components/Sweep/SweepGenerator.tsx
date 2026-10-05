@@ -1,21 +1,12 @@
 import React, { useState } from 'react';
 import { RadarConfig } from '../../radar/types.ts';
-import { calculateRadarPerformance } from '../../radar/calculate.ts';
-import { validateRadarConfig } from '../../radar/validate.ts';
+import { buildSweepRows, generateSweepLua, SweepableField } from '../../radar/sweep.ts';
 import { Download, Play, Table, AlertCircle, CheckCircle2, Code, Copy, Check } from 'lucide-react';
 import { useLanguage } from '../../i18n/context.tsx';
 
 interface SweepGeneratorProps {
   baseConfig: RadarConfig;
 }
-
-type SweepableField =
-  | 'frequencySlopeMHzUs'
-  | 'adcSamples'
-  | 'sampleRateKsps'
-  | 'idleTimeUs'
-  | 'rampEndTimeUs'
-  | 'loops';
 
 interface SweepFieldMeta {
   id: SweepableField;
@@ -115,53 +106,7 @@ export const SweepGenerator: React.FC<SweepGeneratorProps> = ({
     }
   };
 
-  // Generate table rows
-  const rows: number[] = [];
-  const safeStep = Math.max(0.001, Math.abs(stepVal));
-  const safeStart = startVal;
-  const safeStop = stopVal;
-
-  let current = safeStart;
-  const maxIterations = 50;
-  let count = 0;
-
-  if (safeStart <= safeStop) {
-    while (current <= safeStop + 1e-6 && count < maxIterations) {
-      rows.push(current);
-      current += safeStep;
-      count++;
-    }
-  } else {
-    while (current >= safeStop - 1e-6 && count < maxIterations) {
-      rows.push(current);
-      current -= safeStep;
-      count++;
-    }
-  }
-
-  const tableData = rows.map((val) => {
-    const sweepConfig: RadarConfig = {
-      ...baseConfig,
-      profile: {
-        ...baseConfig.profile,
-        ...(currentMeta.targetObject === 'profile' ? { [currentMeta.id]: val } : {}),
-      },
-      frame: {
-        ...baseConfig.frame,
-        ...(currentMeta.targetObject === 'frame' ? { [currentMeta.id]: val } : {}),
-      },
-    };
-
-    const perf = calculateRadarPerformance(sweepConfig);
-    const valResult = validateRadarConfig(sweepConfig, perf);
-
-    return {
-      value: val,
-      perf,
-      valResult,
-      isValid: valResult.isValid,
-    };
-  });
+  const tableData = buildSweepRows(baseConfig, selectedFieldId, startVal, stopVal, stepVal);
 
   // Export CSV
   const handleExportCsv = () => {
@@ -196,7 +141,7 @@ export const SweepGenerator: React.FC<SweepGeneratorProps> = ({
       );
     });
 
-    const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob(['\uFEFF' + csvLines.join('\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -207,49 +152,7 @@ export const SweepGenerator: React.FC<SweepGeneratorProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const generateSweepLua = (): string => {
-    const valuesArrayStr = rows.map((v) => (Number.isInteger(v) ? v : v.toFixed(2))).join(', ');
-    const p = baseConfig.profile;
-
-    return `-- ==============================================================================
--- mmWave Studio 2.x Automated Parameter Sweep Script
--- Swept Parameter: ${currentMeta.labelEn} (${currentMeta.unit})
--- Target: TI AWR1843BOOST + DCA1000
--- ==============================================================================
-
-local sweep_values = { ${valuesArrayStr} }
-
-print("[SWEEP] Starting parameter sweep across " .. #sweep_values .. " iterations...")
-
-for idx, val in ipairs(sweep_values) do
-    print(string.format("[SWEEP %d/%d] Applying ${currentMeta.labelEn} = %.2f ${currentMeta.unit}", idx, #sweep_values, val))
-
-    -- Update Profile Configuration with stepped value
-    ${
-      currentMeta.id === 'frequencySlopeMHzUs'
-        ? `ar1.ProfileConfig(0, ${p.startFrequencyGHz}, ${p.idleTimeUs}, ${p.adcStartTimeUs}, ${p.rampEndTimeUs}, 0, 0, val, 1, ${p.adcSamples}, ${p.sampleRateKsps}, 0, 0, ${p.rxGainDb})`
-        : currentMeta.id === 'adcSamples'
-        ? `ar1.ProfileConfig(0, ${p.startFrequencyGHz}, ${p.idleTimeUs}, ${p.adcStartTimeUs}, ${p.rampEndTimeUs}, 0, 0, ${p.frequencySlopeMHzUs}, 1, math.floor(val), ${p.sampleRateKsps}, 0, 0, ${p.rxGainDb})`
-        : currentMeta.id === 'sampleRateKsps'
-        ? `ar1.ProfileConfig(0, ${p.startFrequencyGHz}, ${p.idleTimeUs}, ${p.adcStartTimeUs}, ${p.rampEndTimeUs}, 0, 0, ${p.frequencySlopeMHzUs}, 1, ${p.adcSamples}, math.floor(val), 0, 0, ${p.rxGainDb})`
-        : `ar1.ProfileConfig(0, ${p.startFrequencyGHz}, ${p.idleTimeUs}, ${p.adcStartTimeUs}, ${p.rampEndTimeUs}, 0, 0, ${p.frequencySlopeMHzUs}, 1, ${p.adcSamples}, ${p.sampleRateKsps}, 0, 0, ${p.rxGainDb})`
-    }
-
-    ${
-      currentMeta.id === 'loops'
-        ? `ar1.FrameConfig(0, ${baseConfig.frame.chirpEndIndex}, math.floor(val), ${baseConfig.frame.frames}, ${baseConfig.frame.periodicityMs}, 0, 0)`
-        : ''
-    }
-
-    RSTD.Sleep(100)
-    print("  Profile updated successfully.")
-end
-
-print("[SWEEP] Parameter sweep complete.")
-`;
-  };
-
-  const sweepLuaCode = generateSweepLua();
+  const sweepLuaCode = generateSweepLua(tableData, selectedFieldId);
 
   const handleCopySweepLua = async () => {
     try {

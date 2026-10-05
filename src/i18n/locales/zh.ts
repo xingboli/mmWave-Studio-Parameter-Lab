@@ -129,10 +129,10 @@ export const zhTranslations: Translations = {
 
   // Lua Preview
   luaTitle: 'mmWave Studio 2.x Lua 脚本输出',
-  modeA: '模式 A: 纯参数配置 (已验证)',
+  modeA: '模式 A: 纯参数配置 (接口已核对)',
   modeB: '模式 B: +DCA1000 捕获 (Beta)',
   modeC: '模式 C: 完整自动化流水线 (参考模板)',
-  verifiedLabel: '已验证 TI mmWave Studio 2.x ar1.* API 命令',
+  verifiedLabel: '已核对 Studio 2.1.1 接口映射，尚未完成硬件实测',
   unverifiedLabel: '包含 DCA1000/整机启动指令：请核对本地网卡配置与固件路径',
   perfHeaderToggle: '生成物理性能指标注释头',
   btnCopy: '复制脚本',

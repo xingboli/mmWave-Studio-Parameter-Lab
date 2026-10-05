@@ -50,42 +50,24 @@ export function getHpf2Index(khz?: number): number {
   return 3;
 }
 
-/**
- * Verified Section 1: Channel and ADC Buffer Configuration
- * TI API: ar1.ChannelConfig(rxMask, txMask, cascading)
- * TI API: ar1.ADCBufConfig(dataFmt, iqSwap, chanInterleave, chirpThreshold)
- */
+/** Studio 2.1.1 ChanNAdcConfig: TX0..2, RX0..3, ADC bits index, format, IQ swap. */
 export function buildChannelSection(config: RadarConfig): LuaSection {
-  const rxMask = getRxMask(config.channels.rxEnabled);
-  const txMask = getTxMask(config.channels.txEnabled);
-
-  // ADC format: 2 = 16-bit complex IQ
-  const dataFmt = config.adc.complex ? 2 : 1;
-  const iqSwap = config.adc.iqSwap ? 1 : 0;
-
   return {
-    title: '1. RF Channel & ADC Buffer Configuration',
+    title: '1. RF Channel & ADC Configuration',
     isVerified: true,
-    commands: [
-      {
-        apiName: 'ar1.ChannelConfig',
-        args: [rxMask, txMask, 0],
-        comment: `RX Mask: ${rxMask} (0x${rxMask.toString(16).toUpperCase()}), TX Mask: ${txMask} (0x${txMask.toString(16).toUpperCase()}), Cascading: 0`,
-        isVerified: true,
-      },
-      {
-        apiName: 'ar1.ADCBufConfig',
-        args: [dataFmt, iqSwap, 1, 0],
-        comment: `Data format: ${dataFmt} (16-bit ${config.adc.complex ? 'Complex IQ' : 'Real'}), IQ Swap: ${iqSwap}, Non-interleaved: 1, Threshold: 0`,
-        isVerified: true,
-      },
-    ],
+    commands: [{
+      apiName: 'ar1.ChanNAdcConfig',
+      args: [...config.channels.txEnabled.map(Number), ...config.channels.rxEnabled.map(Number),
+        [12, 14, 16].indexOf(config.adc.bitsPerComponent), config.adc.complex ? 1 : 0, Number(config.adc.iqSwap)],
+      comment: 'TX0..2 / RX0..3 enable flags; ADC bits: 0=12, 1=14, 2=16; format: 0=real, 1=complex 1x',
+      isVerified: true,
+    }],
   };
 }
 
 /**
  * Verified Section 2: Profile Configuration
- * TI API: ar1.ProfileConfig(profileId, startFreq, idleTime, adcStartTime, rampEndTime, txOutPower, txPhaseShifter, freqSlopeConst, txStartTime, numAdcSamples, digOutSampleRate, hpfCornerFreq1, hpfCornerFreq2, rxGain)
+ * TI API: ar1.ProfileConfig(profileId, startFreq, idleTime, adcStartTime, rampEndTime, tx0OutPower, tx1OutPower, tx2OutPower, tx0Phase, tx1Phase, tx2Phase, freqSlopeConst, txStartTime, numAdcSamples, digOutSampleRate, hpfCornerFreq1, hpfCornerFreq2, rxGain)
  */
 export function buildProfileSection(config: RadarConfig): LuaSection {
   const p = config.profile;
@@ -105,7 +87,9 @@ export function buildProfileSection(config: RadarConfig): LuaSection {
           p.adcStartTimeUs,
           p.rampEndTimeUs,
           p.txOutPowerBackoffDb || 0,
-          0, // txPhaseShifter
+          p.txOutPowerBackoffDb || 0,
+          p.txOutPowerBackoffDb || 0,
+          0, 0, 0, // per-TX phase shifters
           p.frequencySlopeMHzUs,
           1, // txStartTime (typically 1.0 us)
           p.adcSamples,
@@ -123,19 +107,12 @@ export function buildProfileSection(config: RadarConfig): LuaSection {
 
 /**
  * Verified Section 3: Chirp Configuration
- * TI API: ar1.ChirpConfig(chirpStartIndex, chirpEndIndex, profileId, startFreqVar, freqSlopeVar, idleTimeVar, adcStartTimeVar, txMask)
+ * TI API: ar1.ChirpConfig(chirpStartIndex, chirpEndIndex, profileId, startFreqVar, freqSlopeVar, idleTimeVar, adcStartTimeVar, tx0Enable, tx1Enable, tx2Enable)
  */
 export function buildChirpSection(config: RadarConfig): LuaSection {
   const commands: LuaCommand[] = [];
 
-  const chirps =
-    config.chirps && config.chirps.length > 0
-      ? config.chirps
-      : [
-          { chirpIndex: 0, profileId: 0, txEnabled: [true, false, false] as [boolean, boolean, boolean] },
-          { chirpIndex: 1, profileId: 0, txEnabled: [false, true, false] as [boolean, boolean, boolean] },
-          { chirpIndex: 2, profileId: 0, txEnabled: [false, false, true] as [boolean, boolean, boolean] },
-        ];
+  const chirps = config.chirps;
 
   chirps.forEach((chirp) => {
     const txMask = getTxMask(chirp.txEnabled);
@@ -154,7 +131,7 @@ export function buildChirpSection(config: RadarConfig): LuaSection {
         chirp.freqSlopeVarMHzUs || 0,
         chirp.idleTimeVarUs || 0,
         chirp.adcStartTimeVarUs || 0,
-        txMask,
+        ...chirp.txEnabled.map(Number),
       ],
       comment: `Chirp ${chirp.chirpIndex}: Profile ${chirp.profileId}, TX Mask=${txMask} (${txLabels.join('+') || 'None'})`,
       isVerified: true,
@@ -170,7 +147,7 @@ export function buildChirpSection(config: RadarConfig): LuaSection {
 
 /**
  * Verified Section 4: Frame Configuration
- * TI API: ar1.FrameConfig(chirpStartIndex, chirpEndIndex, numLoops, numFrames, framePeriodicity, triggerDelay, numDummyChirps)
+ * TI API: ar1.FrameConfig(chirpStartIndex, chirpEndIndex, numFrames, numLoops, framePeriodicity, triggerDelay, numDummyChirps, triggerSelect)
  */
 export function buildFrameSection(config: RadarConfig): LuaSection {
   const f = config.frame;
@@ -184,11 +161,12 @@ export function buildFrameSection(config: RadarConfig): LuaSection {
         args: [
           f.chirpStartIndex,
           f.chirpEndIndex,
-          f.loops,
           f.frames,
+          f.loops,
           f.periodicityMs,
           f.triggerDelayMs || 0,
           0, // numDummyChirps
+          1, // software trigger
         ],
         comment: `Chirps [${f.chirpStartIndex}..${f.chirpEndIndex}], Loops=${f.loops}, Frames=${f.frames} (${f.frames === 0 ? 'continuous' : 'fixed'}), Period=${f.periodicityMs} ms, TriggerDelay=${f.triggerDelayMs || 0} ms`,
         isVerified: true,
@@ -202,11 +180,11 @@ export function buildFrameSection(config: RadarConfig): LuaSection {
  * Note: DCA1000 commands are verified against standard mmWave Studio 2.x capture scripts,
  * but marked with Beta tags as host network adapter & firewall may require manual arming.
  */
-export function buildDca1000Section(filePath = 'C:\\\\ti\\\\mmwave_studio_02_01_01_00\\\\mmWaveStudio\\\\PostProc\\\\adc_data.bin'): LuaSection {
+export function buildDca1000Section(filePath = 'C:/ti/mmwave_studio_02_01_01_00/mmWaveStudio/PostProc/adc_data.bin'): LuaSection {
   return {
     title: '5. DCA1000 Setup & Capture Control (Mode B - Beta)',
-    description: 'Arm DCA1000 capture card over Ethernet and trigger frame transmission.',
-    isVerified: true,
+    description: 'Requires prior DCA1000 Ethernet initialization, FPGA configuration and sensor LVDS setup. Not hardware tested.',
+    isVerified: false,
     commands: [
       {
         apiName: 'ar1.SelectCaptureDevice',
@@ -216,8 +194,8 @@ export function buildDca1000Section(filePath = 'C:\\\\ti\\\\mmwave_studio_02_01_
       },
       {
         apiName: 'ar1.CaptureCardConfig_Mode',
-        args: [1, 1, 1, 2, 1, 30],
-        comment: 'DCA1000 Ethernet mode: 1 (Raw mode), 1 (Complex), 1 (Standard), 2 (16-bit), 1 (LVDS lane), 30 ms delay',
+        args: [1, 2, 1, 2, 3, 30],
+        comment: 'DCA1000: logging=1, xWR18xx LVDS=2, transfer=1, capture=2, format=3, timer=30',
         isVerified: true,
       },
       {
@@ -228,9 +206,15 @@ export function buildDca1000Section(filePath = 'C:\\\\ti\\\\mmwave_studio_02_01_
       },
       {
         apiName: 'ar1.CaptureCardConfig_StartRecord',
-        args: [`"${filePath}"`, 1],
+        args: [JSON.stringify(filePath).replace(/\\u00([0-9a-f]{2})/gi, (_, hex) => '\\' + parseInt(hex, 16).toString().padStart(3, '0')), 1],
         comment: `Arm DCA1000 to record to: ${filePath}`,
         isVerified: true,
+      },
+      {
+        apiName: 'RSTD.Sleep',
+        args: [1000],
+        comment: 'Allow recording to arm before the software trigger',
+        isVerified: false,
       },
       {
         apiName: 'ar1.StartFrame',
